@@ -53,6 +53,13 @@ uint32_t crc32_bitwise(const void* data, size_t length)
 	return crc;
 }
 
+cl_uint check(cl_uint status)
+{
+	if (status != CL_SUCCESS)
+		printf("Error: status == %u\n", status);
+
+	return status;
+}
 
 int main(int argc, char *argv[])
 {
@@ -117,7 +124,7 @@ int main(int argc, char *argv[])
 
 	cl_uint numPlatforms;	//the NO. of platforms
 	cl_platform_id platform = NULL;	//the chosen platform
-	cl_int status = clGetPlatformIDs(0, NULL, &numPlatforms);
+	cl_int status = check(clGetPlatformIDs(0, NULL, &numPlatforms));
 	if (status != CL_SUCCESS)
 	{
 		printf("Error: getting Platform IDs (%d)\n", status);
@@ -130,7 +137,7 @@ int main(int argc, char *argv[])
 	if (numPlatforms > 0)
 	{
 		cl_platform_id* platforms = (cl_platform_id*)malloc(numPlatforms* sizeof(cl_platform_id));
-		clGetPlatformIDs(numPlatforms, platforms, NULL);
+		check(clGetPlatformIDs(numPlatforms, platforms, NULL));
 		platform = platforms[0];
 		free(platforms);
 	}
@@ -138,7 +145,7 @@ int main(int argc, char *argv[])
 	/*Step 2:Query the platform and choose the first GPU device if has one.Otherwise use the CPU as device.*/
 	cl_uint				numDevices = 0;
 	cl_device_id        *devices;
-	clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &numDevices);
+	check(clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &numDevices));
 	if (numDevices == 0)	//no GPU available.
 	{
 		printf("Error: No GPU device available. TODO: Allow CPU\n");
@@ -147,7 +154,7 @@ int main(int argc, char *argv[])
 	else
 	{
 		devices = (cl_device_id*)malloc(numDevices * sizeof(cl_device_id));
-		clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, numDevices, devices, NULL);
+		check(clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, numDevices, devices, NULL));
 	}
 
 	cl_context context = clCreateContext(NULL, 1, devices, NULL, NULL, NULL);
@@ -186,7 +193,7 @@ int main(int argc, char *argv[])
 
 	cl_program program = clCreateProgramWithSource(context, 1, &source, sourceSize, NULL);
 
-	status = clBuildProgram(program, 1, devices, NULL, NULL, NULL);
+	status = check(clBuildProgram(program, 1, devices, NULL, NULL, NULL));
 
 	if (status != CL_SUCCESS)
 	{
@@ -257,32 +264,32 @@ int main(int argc, char *argv[])
 
 
 			m.lock();
-			clSetKernelArg(crc, 0, sizeof(cl_mem), (void *)&crcOutput);
-			clSetKernelArg(crc2, 0, sizeof(cl_mem), (void *)&crcOutput2);
-			clSetKernelArg(crc, 1, sizeof(cl_mem), (void *)&crcTestFor);
-			clSetKernelArg(crc2, 1, sizeof(cl_mem), (void *)&crcTestFor);
-			clSetKernelArg(crc, 2, sizeof(cl_mem), (void *)&crcCompleteFully);
-			clSetKernelArg(crc2, 2, sizeof(cl_mem), (void *)&crcCompleteFully);
-			clSetKernelArg(crc, 3, sizeof(cl_mem), (void *)&crcFindCount);
-			clSetKernelArg(crc2, 3, sizeof(cl_mem), (void *)&crcFindCount2);
+			check(clSetKernelArg(crc, 0, sizeof(cl_mem), (void *)&crcOutput));
+			check(clSetKernelArg(crc2, 0, sizeof(cl_mem), (void *)&crcOutput2));
+			check(clSetKernelArg(crc, 1, sizeof(cl_mem), (void *)&crcTestFor));
+			check(clSetKernelArg(crc2, 1, sizeof(cl_mem), (void *)&crcTestFor));
+			check(clSetKernelArg(crc, 2, sizeof(cl_mem), (void *)&crcCompleteFully));
+			check(clSetKernelArg(crc2, 2, sizeof(cl_mem), (void *)&crcCompleteFully));
+			check(clSetKernelArg(crc, 3, sizeof(cl_mem), (void *)&crcFindCount));
+			check(clSetKernelArg(crc2, 3, sizeof(cl_mem), (void *)&crcFindCount2));
 
 			size_t global_work_size[1] = { count };
 			if (!command_line)
 				printf("Running the collision finder...\n");
 
 			cl_event Events[4];
-			clEnqueueNDRangeKernel(commandQueue, crc, 1, NULL, global_work_size, NULL, 0, NULL, &Events[0]);
-			clEnqueueNDRangeKernel(commandQueue, crc2, 1, NULL, global_work_size, NULL, 0, NULL, &Events[1]);
+			check(clEnqueueNDRangeKernel(commandQueue, crc, 1, NULL, global_work_size, NULL, 0, NULL, &Events[0]));
+			check(clEnqueueNDRangeKernel(commandQueue, crc2, 1, NULL, global_work_size, NULL, 0, NULL, &Events[1]));
 			m.unlock();
 
-			clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_TRUE, 0, 4, &FindCount2, 1, &Events[0], &Events[2]);
-			clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, 1, &Events[1], &Events[3]);
+			check(clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_TRUE, 0, 4, &FindCount2, 1, &Events[0], &Events[2]));
+			check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, 1, &Events[1], &Events[3]));
 
 			size_t output1[max_finds], output2[max_finds];
 			if (FindCount > 0)
-				clEnqueueReadBuffer(commandQueue, crcOutput, CL_TRUE, 0, 4 * FindCount, output1, 1, &Events[2], NULL);
+				check(clEnqueueReadBuffer(commandQueue, crcOutput, CL_TRUE, 0, 4 * FindCount, output1, 1, &Events[2], NULL));
 			if (FindCount2 > 0)
-				clEnqueueReadBuffer(commandQueue, crcOutput2, CL_TRUE, 0, 4 * FindCount2, output2, 1, &Events[3], NULL);
+				check(clEnqueueReadBuffer(commandQueue, crcOutput2, CL_TRUE, 0, 4 * FindCount2, output2, 1, &Events[3], NULL));
 
 			char index[128];
 			char outputstr[128];
@@ -304,14 +311,14 @@ int main(int argc, char *argv[])
 				if (jsonfile)
 					outjson[index].push_back(outputstr);
 			}
-			clReleaseEvent(Events[0]);
-			clReleaseEvent(Events[1]);
-			clReleaseEvent(Events[2]);
-			clReleaseEvent(Events[3]);
-			clReleaseMemObject(crcTestFor);		//Release mem object.
-			clReleaseMemObject(crcFindCount);		//Release mem object.
-			clReleaseMemObject(crcFindCount2);		//Release mem object.
-			clReleaseMemObject(crcCompleteFully);		//Release mem object.
+			check(clReleaseEvent(Events[0]));
+			check(clReleaseEvent(Events[1]));
+			check(clReleaseEvent(Events[2]));
+			check(clReleaseEvent(Events[3]));
+			check(clReleaseMemObject(crcTestFor));		//Release mem object.
+			check(clReleaseMemObject(crcFindCount));		//Release mem object.
+			check(clReleaseMemObject(crcFindCount2));		//Release mem object.
+			check(clReleaseMemObject(crcCompleteFully));		//Release mem object.
 
 
 		});
@@ -336,7 +343,7 @@ int main(int argc, char *argv[])
 
 	clReleaseContext(context);				//Release context.
 	clReleaseProgram(program);				//Release the program object.
-			clReleaseCommandQueue(commandQueue);	//Release  Command queue.
+	clReleaseCommandQueue(commandQueue);	//Release  Command queue.
 
 	if (!command_line)
 		printf("BYE!");
