@@ -9,6 +9,7 @@
 
 
 #define count 200000000
+const size_t threads_at_once = 1;
 
 using json = nlohmann::json;
 
@@ -186,8 +187,6 @@ int main(int argc, char *argv[])
 		crc_array[i] = j[i].get<size_t>();
 	size_t crc_array_size = jsonfile ? j.size() : 1;
 
-	const size_t threads_at_once = 2;
-
 	std::thread threads[threads_at_once];
 
 
@@ -312,10 +311,18 @@ int main(int argc, char *argv[])
 				if (jsonfile)
 					outjson[index].push_back(outputstr);
 			}
+			check(clReleaseMemObject(crcCount1));
+			check(clReleaseMemObject(crcCount2));
+			check(clReleaseMemObject(crcOutput));
+			check(clReleaseMemObject(crcOutput2));
 			check(clReleaseMemObject(crcTestFor));		//Release mem object.
 			check(clReleaseMemObject(crcFindCount));		//Release mem object.
 			check(clReleaseMemObject(crcFindCount2));		//Release mem object.
 			check(clReleaseMemObject(crcCompleteFully));		//Release mem object.
+			check(clReleaseEvent(Events[0]));
+			check(clReleaseEvent(Events[1]));
+			check(clReleaseEvent(Events[2]));
+			check(clReleaseEvent(Events[3]));
 
 
 		});
