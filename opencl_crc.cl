@@ -37,22 +37,29 @@ __kernel void crc(__global uint *output, __global uint *TestFor, __global uchar 
 {
 	uint now = get_global_id(0);
 
-	uint crc = 0xE9348804;
+	// gm_STEAM_0:0:
+	uint crcval = 0xE9348804;
+
+	uint mulval = 1000000000;
+
+	while (now / mulval == 0)
+		mulval /= 10;
 	
-	while (now != 0)
+	while (mulval != 0)
 	{
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ ((now % 10) + '0')];
-		now /= 10;
+		uchar temp = (uchar)(now / mulval);
+		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ (temp + '0')];
+		now -= mulval * temp;
+		mulval /= 10;
 	}
 	if (*complete)
 	{
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ '_'];
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ 'g'];
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ 'm'];
+		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ '_'];
+		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ 'g'];
+		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ 'm'];
 	}
 
-	uchar bit = 1 << (get_global_id(0) % 8);
-	if (crc == *TestFor)
+	if (crcval == *TestFor)
 	{
 		output[atomic_inc(total)] = get_global_id(0);
 	}
@@ -62,23 +69,28 @@ __kernel void crc2(__global uint *output, __global uint *TestFor, __global uchar
 	uint now = get_global_id(0);
 
 	// gm_STEAM_0:1:
-	uint crc = 0xF02FB945;
+	uint crcval = 0xF02FB945;
 
+	uint mulval = 1000000000;
+
+	while (now / mulval == 0)
+		mulval /= 10;
 	
-	while (now != 0)
+	while (mulval != 0)
 	{
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ ((now % 10) + '0')];
-		now /= 10;
+		uchar temp = (uchar)(now / mulval);
+		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ (temp + '0')];
+		now -= mulval * temp;
+		mulval /= 10;
 	}
 	if (*complete)
 	{
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ '_'];
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ 'g'];
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ 'm'];
+		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ '_'];
+		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ 'g'];
+		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ 'm'];
 	}
 
-	uchar bit = 1 << (get_global_id(0) % 8);
-	if (crc == *TestFor)
+	if (crcval == *TestFor)
 	{
 		output[atomic_inc(total)] = get_global_id(0);
 	}
