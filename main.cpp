@@ -15,7 +15,7 @@ using json = nlohmann::json;
 bool fcanaccess(const char *file)
 {
 
-	FILE *f = fopen(file, "rb");
+	FILE *f = fopen(file, "wb");
 	if (f)
 		fclose(f);
 
