@@ -233,6 +233,7 @@ int main(int argc, char *argv[])
 
 			sscanf(str.c_str(), "%u", &testfor);
 			testfor = ~testfor;
+			jsoni = 0; // hack to fix threads
 		}
 		else if (jsonfile)
 		{
