@@ -33,34 +33,17 @@ __constant uint lookup[0x100] = {
 	0xBDBDF21C,0xCABAC28A,0x53B39330,0x24B4A3A6,0xBAD03605,0xCDD70693,0x54DE5729,0x23D967BF,
 	0xB3667A2E,0xC4614AB8,0x5D681B02,0x2A6F2B94,0xB40BBE37,0xC30C8EA1,0x5A05DF1B,0x2D02EF8D,
 };
-__kernel void crc(__global uchar *output, __global uint *TestFor, __global uchar *complete, __global uint *total)
+__kernel void crc(__global uint *output, __global uint *TestFor, __global uchar *complete, __global uint *total)
 {
 	uint now = get_global_id(0);
-	uchar str[10];
 
-	str[9] = (now % 10) + '0';
-	str[8] = ((now / 10) % 10) + '0';
-	str[7] = ((now / 100) % 10) + '0';
-	str[6] = ((now / 1000) % 10) + '0';
-	str[5] = ((now / 10000) % 10) + '0';
-	str[4] = ((now / 100000) % 10) + '0';
-	str[3] = ((now / 1000000) % 10) + '0';
-	str[2] = ((now / 10000000) % 10) + '0';
-	str[1] = ((now / 100000000) % 10) + '0';
-	str[0] = ((now / 1000000000) % 10) + '0';
-
-	uchar *current = str;
-	uint length = 10;
-	while (*current++ == '0')
-		length--;
-	current--;
-
-	// gm_STEAM_0:0:
 	uint crc = 0xE9348804;
-
-	while (length-- != 0)
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ *current++];
-
+	
+	while (now != 0)
+	{
+		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ ((now % 10) + '0')];
+		now /= 10;
+	}
 	if (*complete)
 	{
 		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ '_'];
@@ -71,38 +54,22 @@ __kernel void crc(__global uchar *output, __global uint *TestFor, __global uchar
 	uchar bit = 1 << (get_global_id(0) % 8);
 	if (crc == *TestFor)
 	{
-		atomic_inc(total);
-		output[get_global_id(0) / 8] |= bit;
+		output[atomic_inc(total)] = get_global_id(0);
 	}
 }
-__kernel void crc2(__global uchar *output, __global uint *TestFor, __global uchar *complete, __global uint *total)
+__kernel void crc2(__global uint *output, __global uint *TestFor, __global uchar *complete, __global uint *total)
 {
 	uint now = get_global_id(0);
-	uchar str[10];
-
-	str[9] = (now % 10) + '0';
-	str[8] = ((now / 10) % 10) + '0';
-	str[7] = ((now / 100) % 10) + '0';
-	str[6] = ((now / 1000) % 10) + '0';
-	str[5] = ((now / 10000) % 10) + '0';
-	str[4] = ((now / 100000) % 10) + '0';
-	str[3] = ((now / 1000000) % 10) + '0';
-	str[2] = ((now / 10000000) % 10) + '0';
-	str[1] = ((now / 100000000) % 10) + '0';
-	str[0] = ((now / 1000000000) % 10) + '0';
-
-	uchar *current = str;
-	uint length = 10;
-	while (*current++ == '0')
-		length--;
-	current--;
 
 	// gm_STEAM_0:1:
 	uint crc = 0xF02FB945;
 
-	while (length-- != 0)
-		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ *current++];
-
+	
+	while (now != 0)
+	{
+		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ ((now % 10) + '0')];
+		now /= 10;
+	}
 	if (*complete)
 	{
 		crc = (crc >> 8) ^ lookup[(crc & 0xFF) ^ '_'];
@@ -113,24 +80,6 @@ __kernel void crc2(__global uchar *output, __global uint *TestFor, __global ucha
 	uchar bit = 1 << (get_global_id(0) % 8);
 	if (crc == *TestFor)
 	{
-		atomic_inc(total);
-		output[get_global_id(0) / 8] |= bit;
+		output[atomic_inc(total)] = get_global_id(0);
 	}
-}
-
-__kernel void mklist(__global uint *num, __global uchar *input, __global uint *output)
-{
-	uint8 count = 0;
-	unsigned char b = input[get_global_id(0)];
-	unsigned int base = get_global_id(0) * 8;
-	for (size_t z = 0; z < 8; z++)
-		if (b & (1 << z))
-			output[atomic_inc(num)] = base + z;
-}
-
-__kernel void zero(__global uint2 *dst)
-{
-
-	dst[get_global_id(0)] = 0;
-
 }

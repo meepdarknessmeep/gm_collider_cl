@@ -218,6 +218,7 @@ int main(int argc, char *argv[])
 	std::mutex m;
 	size_t jsoni = 0;
 	cl_command_queue commandQueue = clCreateCommandQueue(context, devices[0], 0, NULL);
+	cl_mem crcCompleteFully = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 1, &complete_fully, NULL);
 	while (1)
 	{
 		if (interactive)
@@ -243,7 +244,7 @@ int main(int argc, char *argv[])
 		}
 
 
-		threads[jsoni++ % threads_at_once] = std::thread([&commandQueue, &crc, &crc2, &m, &command_line, &complete_fully, &program, &outjson, &context, jsoni, testfor, jsonfile]()
+		threads[jsoni++ % threads_at_once] = std::thread([&crcCompleteFully, &commandQueue, &crc, &crc2, &m, &command_line, &program, &outjson, &context, jsoni, testfor, jsonfile]()
 		{
 			const size_t max_finds = 100;
 
@@ -258,7 +259,6 @@ int main(int argc, char *argv[])
 			size_t testfor2 = testfor;
 
 			cl_mem crcTestFor = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 4, &testfor2, NULL);
-			cl_mem crcCompleteFully = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 1, &complete_fully, NULL);
 			cl_mem crcFindCount = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
 			cl_mem crcFindCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
 
