@@ -1,17 +1,31 @@
 ﻿#define CL_USE_DEPRECATED_OPENCL_2_0_APIS
-#include <CL/cl.h>
+#include "CL/cl.h"
 #include <iostream>
 #include <string.h>
 #include <string>
+#include <mutex>
 #include <thread>
 #include "json.hpp"
 
+
+#define count 200000000
+
 using json = nlohmann::json;
 
-char *fread(char *file, size_t *outlen)
+bool fcanaccess(const char *file)
 {
 
 	FILE *f = fopen(file, "rb");
+	if (f)
+		fclose(f);
+
+	return f != 0;
+}
+
+char *fread(const char *file, size_t *outlen)
+{
+
+	FILE *f = fopen(file, "wb");
 	if (!f)
 		return 0;
 
@@ -84,6 +98,16 @@ int main(int argc, char *argv[])
 
 		size_t jsonlen;
 		char *jsontext = fread(argv[2], &jsonlen);
+		if (!jsontext)
+		{
+			printf("Error: File %s not found.\n", argv[2]);
+			return 0;
+		}
+		if (!fcanaccess(argv[3]))
+		{
+			printf("Error: File %s cannot be opened.\n", argv[3]);
+			return 0;
+		}
 		j = json::parse(jsontext);
 
 		delete[] jsontext;
@@ -96,7 +120,9 @@ int main(int argc, char *argv[])
 	cl_int status = clGetPlatformIDs(0, NULL, &numPlatforms);
 	if (status != CL_SUCCESS)
 	{
-		printf("Error: getting Platform IDs (%d)", status);
+		printf("Error: getting Platform IDs (%d)\n", status);
+		if (status == -1001) 
+			printf("Your error is from ICD registration. If you are on linux, set your environment variable for OPENCL_VENDOR_PATH to /etc/OpenCL/vendors (default path). Make sure you have your drivers installed.\n");
 		return 0;
 	}
 
@@ -126,19 +152,6 @@ int main(int argc, char *argv[])
 
 	cl_context context = clCreateContext(NULL, 1, devices, NULL, NULL, NULL);
 
-	const size_t count = 0xFFFFFFFF;
-
-	size_t ARRAY_LEN = count / 8 + 1;
-	if (!command_line)
-		printf("Creating some room...\n");
-
-	cl_mem crcOutput = clCreateBuffer(context, CL_MEM_WRITE_ONLY, ARRAY_LEN + 8, NULL, NULL);
-	cl_mem crcOutput2 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, ARRAY_LEN + 8, NULL, NULL);
-	cl_mem crcCount1 = clCreateBuffer(context, CL_MEM_READ_WRITE, 8, NULL, NULL);
-	cl_mem crcCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE, 8, NULL, NULL);
-
-
-	
 	size_t codelen;
 	const char *source = fread("opencl_crc.cl", &codelen);
 
@@ -166,7 +179,9 @@ int main(int argc, char *argv[])
 		crc_array[i] = j[i].get<size_t>();
 	size_t crc_array_size = jsonfile ? j.size() : 1;
 
-	std::thread *threads = new std::thread[crc_array_size];
+	const size_t threads_at_once = 2;
+
+	std::thread threads[threads_at_once];
 
 
 	cl_program program = clCreateProgramWithSource(context, 1, &source, sourceSize, NULL);
@@ -193,15 +208,10 @@ int main(int argc, char *argv[])
 	}
 	cl_kernel crc = clCreateKernel(program, "crc", NULL);
 	cl_kernel crc2 = clCreateKernel(program, "crc2", NULL);
-	cl_kernel mklist = clCreateKernel(program, "mklist", NULL);
-	cl_kernel mklist2 = clCreateKernel(program, "mklist", NULL);
-	cl_kernel zero1 = clCreateKernel(program, "zero", NULL);
-	cl_kernel zero2 = clCreateKernel(program, "zero", NULL);
 
+	std::mutex m;
+	size_t jsoni = 0;
 	cl_command_queue commandQueue = clCreateCommandQueue(context, devices[0], 0, NULL);
-
-
-	size_t jsoni = jsonfile ? 0 : 1;
 	while (1)
 	{
 		if (interactive)
@@ -221,143 +231,121 @@ int main(int argc, char *argv[])
 		{
 			if (crc_array_size <= jsoni)
 				break;
-			printf("%u left\n", j.size() - jsoni);
 
-			testfor = ~crc_array[jsoni++];
+			testfor = ~crc_array[jsoni];
 		}
 
 
-
-		unsigned int FindCount = 0, FindCount2 = 0;
-
-		cl_mem crcTestFor = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 4, &testfor, NULL);
-		cl_mem crcCompleteFully = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 1, &complete_fully, NULL);
-		cl_mem crcFindCount = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
-		cl_mem crcFindCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
-
-		clSetKernelArg(zero1, 0, sizeof(cl_mem), (void *)&crcOutput);
-		clSetKernelArg(zero2, 0, sizeof(cl_mem), (void *)&crcOutput2);
-
-
-		size_t array_len_work[1] = { ARRAY_LEN / 8 + 1 };
-		cl_event ZeroEvents[2];
-		clEnqueueNDRangeKernel(commandQueue, zero1, 1, NULL, array_len_work, NULL, 0, NULL, &ZeroEvents[0]);
-		clEnqueueNDRangeKernel(commandQueue, zero2, 1, NULL, array_len_work, NULL, 0, NULL, &ZeroEvents[1]);
-
-
-		clSetKernelArg(crc, 0, sizeof(cl_mem), (void *)&crcOutput);
-		clSetKernelArg(crc2, 0, sizeof(cl_mem), (void *)&crcOutput2);
-		clSetKernelArg(crc, 1, sizeof(cl_mem), (void *)&crcTestFor);
-		clSetKernelArg(crc2, 1, sizeof(cl_mem), (void *)&crcTestFor);
-		clSetKernelArg(crc, 2, sizeof(cl_mem), (void *)&crcCompleteFully);
-		clSetKernelArg(crc2, 2, sizeof(cl_mem), (void *)&crcCompleteFully);
-		clSetKernelArg(crc, 3, sizeof(cl_mem), (void *)&crcFindCount);
-		clSetKernelArg(crc2, 3, sizeof(cl_mem), (void *)&crcFindCount2);
-
-		size_t global_work_size[1] = { count };
-		if (!command_line)
-			printf("Running the collision finder...\n");
-
-		 clEnqueueNDRangeKernel(commandQueue, crc, 1, NULL, global_work_size, NULL, 1, &ZeroEvents[0], NULL);
-		 clEnqueueNDRangeKernel(commandQueue, crc2, 1, NULL, global_work_size, NULL, 1, &ZeroEvents[1], NULL);
-
-
-		clFinish(commandQueue);
-		// setup finders arrays
-		if (!command_line)
-			printf("Sorting...\n");
-
-		 clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, 0, NULL, NULL);
-		cl_mem crcFindArray1 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 4 * (FindCount + 1), NULL, NULL);
-
-
-		size_t crc_null_work[1] = { 1 };
-		clSetKernelArg(zero1, 0, sizeof(cl_mem), (void *)&crcCount1);
-		clSetKernelArg(zero2, 0, sizeof(cl_mem), (void *)&crcCount2);
-
-		clEnqueueNDRangeKernel(commandQueue, zero1, 1, NULL, crc_null_work, NULL, 0, NULL, &ZeroEvents[0]);
-		clEnqueueNDRangeKernel(commandQueue, zero2, 1, NULL, crc_null_work, NULL, 0, NULL, &ZeroEvents[1]);
-
-		clSetKernelArg(mklist, 0, sizeof(cl_mem), (void *)&crcCount1);
-		clSetKernelArg(mklist, 1, sizeof(cl_mem), (void *)&crcOutput);
-		clSetKernelArg(mklist, 2, sizeof(cl_mem), (void *)&crcFindArray1);
-		size_t ff1[1] = { ARRAY_LEN };
-		clEnqueueNDRangeKernel(commandQueue, mklist, 1, NULL, ff1, NULL, 1, &ZeroEvents[0], NULL);
-
-		// second finder for STEAM_0:1
-		 clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_TRUE, 0, 4, &FindCount2, 0, NULL, NULL);
-		cl_mem crcFindArray2 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 4 * (FindCount2 + 1), NULL, NULL);
-
-		clSetKernelArg(mklist2, 0, sizeof(cl_mem), (void *)&crcCount2);
-		clSetKernelArg(mklist2, 1, sizeof(cl_mem), (void *)&crcOutput2);
-		clSetKernelArg(mklist2, 2, sizeof(cl_mem), (void *)&crcFindArray2);
-		clEnqueueNDRangeKernel(commandQueue, mklist2, 1, NULL, ff1, NULL, 1, &ZeroEvents[1], NULL);
-
-		clFinish(commandQueue);
-
-		size_t *crcs = new size_t[FindCount2 + FindCount + 1];
-
-		if (FindCount > 0)
-			 clEnqueueReadBuffer(commandQueue, crcFindArray1, CL_TRUE, 0, 4 * FindCount, crcs, 0, NULL, NULL);
-		if (FindCount2 > 0)
-			 clEnqueueReadBuffer(commandQueue, crcFindArray2, CL_TRUE, 0, 4 * FindCount2, &crcs[FindCount], 0, NULL, NULL);
-
-		threads[jsoni - 1] = std::thread([&]()
+		threads[jsoni++ % threads_at_once] = std::thread([&commandQueue, &crc, &crc2, &m, &command_line, &complete_fully, &program, &outjson, &context, jsoni, testfor, jsonfile]()
 		{
-			static char index[128];
+			const size_t max_finds = 100;
+
+			const size_t ARRAY_LEN = max_finds * 4;
+			cl_mem crcOutput = clCreateBuffer(context, CL_MEM_WRITE_ONLY, ARRAY_LEN, NULL, NULL);
+			cl_mem crcOutput2 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, ARRAY_LEN, NULL, NULL);
+			cl_mem crcCount1 = clCreateBuffer(context, CL_MEM_READ_WRITE, 8, NULL, NULL);
+			cl_mem crcCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE, 8, NULL, NULL);
+
+			
+			unsigned int FindCount = 0, FindCount2 = 0;
+			size_t testfor2 = testfor;
+
+			cl_mem crcTestFor = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 4, &testfor2, NULL);
+			cl_mem crcCompleteFully = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 1, &complete_fully, NULL);
+			cl_mem crcFindCount = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
+			cl_mem crcFindCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
+
+
+			m.lock();
+			clSetKernelArg(crc, 0, sizeof(cl_mem), (void *)&crcOutput);
+			clSetKernelArg(crc2, 0, sizeof(cl_mem), (void *)&crcOutput2);
+			clSetKernelArg(crc, 1, sizeof(cl_mem), (void *)&crcTestFor);
+			clSetKernelArg(crc2, 1, sizeof(cl_mem), (void *)&crcTestFor);
+			clSetKernelArg(crc, 2, sizeof(cl_mem), (void *)&crcCompleteFully);
+			clSetKernelArg(crc2, 2, sizeof(cl_mem), (void *)&crcCompleteFully);
+			clSetKernelArg(crc, 3, sizeof(cl_mem), (void *)&crcFindCount);
+			clSetKernelArg(crc2, 3, sizeof(cl_mem), (void *)&crcFindCount2);
+
+			size_t global_work_size[1] = { count };
+			if (!command_line)
+				printf("Running the collision finder...\n");
+
+			cl_event Events[4];
+			clEnqueueNDRangeKernel(commandQueue, crc, 1, NULL, global_work_size, NULL, 0, NULL, &Events[0]);
+			clEnqueueNDRangeKernel(commandQueue, crc2, 1, NULL, global_work_size, NULL, 0, NULL, &Events[1]);
+			m.unlock();
+
+			clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_TRUE, 0, 4, &FindCount2, 1, &Events[0], &Events[2]);
+			clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, 1, &Events[1], &Events[3]);
+
+			size_t output1[max_finds], output2[max_finds];
+			if (FindCount > 0)
+				clEnqueueReadBuffer(commandQueue, crcOutput, CL_TRUE, 0, 4 * FindCount, output1, 1, &Events[2], NULL);
+			if (FindCount2 > 0)
+				clEnqueueReadBuffer(commandQueue, crcOutput2, CL_TRUE, 0, 4 * FindCount2, output2, 1, &Events[3], NULL);
+
+			char index[128];
+			char outputstr[128];
 			sprintf(index, "%u", ~testfor);
 			if (jsonfile)
 				outjson[index] = json::array();
-			for (size_t z = 0; z < FindCount + FindCount2; z++)
+
+			for (size_t z = 0; z < FindCount; z++)
 			{
-				static char outputstr[128];
-				sprintf(outputstr, "STEAM_0:%u:%u", z >= FindCount, crcs[z]);
+				sprintf(outputstr, "%u STEAM_0:0:%u", jsoni, output1[z]);
 				printf("%s%s\n", command_line ? "" : "Found: ", outputstr);
 				if (jsonfile)
 					outjson[index].push_back(outputstr);
 			}
+			for (size_t z = 0; z < FindCount2; z++)
+			{
+				sprintf(outputstr, "%u STEAM_0:1:%u", jsoni, output2[z]);
+				printf("%s%s\n", command_line ? "" : "Found: ", outputstr);
+				if (jsonfile)
+					outjson[index].push_back(outputstr);
+			}
+			clReleaseEvent(Events[0]);
+			clReleaseEvent(Events[1]);
+			clReleaseEvent(Events[2]);
+			clReleaseEvent(Events[3]);
+			clReleaseMemObject(crcTestFor);		//Release mem object.
+			clReleaseMemObject(crcFindCount);		//Release mem object.
+			clReleaseMemObject(crcFindCount2);		//Release mem object.
+			clReleaseMemObject(crcCompleteFully);		//Release mem object.
 
-			delete[] crcs;
 
 		});
-
-		clReleaseMemObject(crcTestFor);		//Release mem object.
-		clReleaseMemObject(crcFindCount);		//Release mem object.
-		clReleaseMemObject(crcFindCount2);		//Release mem object.
-		clReleaseMemObject(crcFindArray2);		//Release mem object.
-		clReleaseMemObject(crcFindArray1);		//Release mem object.
-		clReleaseMemObject(crcCompleteFully);		//Release mem object.
 
 		if (!jsonfile && !interactive)
 			break;
 		if (interactive)
 			threads[0].join();
+		else if (jsoni % threads_at_once == 0)
+			for (size_t i = 0; i < threads_at_once; i++)
+				threads[i].join();
 	}
+	
+	if (!interactive)
+		printf("Waiting for threads...\n");
+
+	if (jsonfile && jsoni % threads_at_once != 0)
+		for (size_t i = 0; i < jsoni % threads_at_once; i++)
+			threads[i].join();
+	else if (!jsonfile)
+		threads[0].join();
+
 	clReleaseContext(context);				//Release context.
-	clReleaseMemObject(crcOutput);		//Release mem object.
-	clReleaseMemObject(crcOutput2);		//Release mem object.
-	clReleaseMemObject(crcCount2);		//Release mem object.
-	clReleaseMemObject(crcCount1);		//Release mem object.
-	clReleaseKernel(crc);				//Release kernel.
-	clReleaseKernel(crc2);				//Release kernel.
-	clReleaseKernel(mklist);				//Release kernel.
-	clReleaseKernel(mklist2);				//Release kernel.
-	clReleaseKernel(zero1);				//Release kernel.
-	clReleaseKernel(zero2);				//Release kernel.
 	clReleaseProgram(program);				//Release the program object.
-	clReleaseCommandQueue(commandQueue);	//Release  Command queue.
+			clReleaseCommandQueue(commandQueue);	//Release  Command queue.
 
-	for (int i = 0; i < crc_array_size; i++)
-	{
-		threads[i].join();
-	}
-
-	delete[] threads;
 	if (!command_line)
 		printf("BYE!");
 
 	delete[] source;
+	delete[] crc_array;
 
+	clReleaseKernel(crc);				//Release kernel.
+	clReleaseKernel(crc2);				//Release kernel.
 	if (jsonfile)
 	{
 		FILE *f = fopen(argv[3], "wb");
