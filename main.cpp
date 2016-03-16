@@ -25,7 +25,7 @@ bool fcanaccess(const char *file)
 char *fread(const char *file, size_t *outlen)
 {
 
-	FILE *f = fopen(file, "wb");
+	FILE *f = fopen(file, "rb");
 	if (!f)
 		return 0;
 
