@@ -318,7 +318,6 @@ int main(int argc, char *argv[])
 			check(clReleaseMemObject(crcTestFor));		//Release mem object.
 			check(clReleaseMemObject(crcFindCount));		//Release mem object.
 			check(clReleaseMemObject(crcFindCount2));		//Release mem object.
-			check(clReleaseMemObject(crcCompleteFully));		//Release mem object.
 			check(clReleaseEvent(Events[0]));
 			check(clReleaseEvent(Events[1]));
 			check(clReleaseEvent(Events[2]));
@@ -348,6 +347,7 @@ int main(int argc, char *argv[])
 	clReleaseContext(context);				//Release context.
 	clReleaseProgram(program);				//Release the program object.
 	clReleaseCommandQueue(commandQueue);	//Release  Command queue.
+	check(clReleaseMemObject(crcCompleteFully));		//Release mem object.
 
 	if (!command_line)
 		printf("BYE!");
