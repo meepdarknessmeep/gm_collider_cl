@@ -311,10 +311,6 @@ int main(int argc, char *argv[])
 				if (jsonfile)
 					outjson[index].push_back(outputstr);
 			}
-			check(clReleaseEvent(Events[0]));
-			check(clReleaseEvent(Events[1]));
-			check(clReleaseEvent(Events[2]));
-			check(clReleaseEvent(Events[3]));
 			check(clReleaseMemObject(crcTestFor));		//Release mem object.
 			check(clReleaseMemObject(crcFindCount));		//Release mem object.
 			check(clReleaseMemObject(crcFindCount2));		//Release mem object.
