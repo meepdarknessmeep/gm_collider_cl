@@ -134,15 +134,15 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 
 	for (cl_uint z = 0; z < FindCount; z++)
 	{
-		sprintf(outputstr, "%u STEAM_0:0:%u", jsoni, output1[z]);
-		printf("%s%s\n", command_line ? "" : "Found: ", outputstr);
+		sprintf(outputstr, "STEAM_0:0:%u", output1[z]);
+		printf("%u %s\n", jsoni, outputstr);
 		if (jsonfile)
 			outjson[index].push_back(outputstr);
 	}
 	for (cl_uint z = 0; z < FindCount2; z++)
 	{
-		sprintf(outputstr, "%u STEAM_0:1:%u", jsoni, output2[z]);
-		printf("%s%s\n", command_line ? "" : "Found: ", outputstr);
+		sprintf(outputstr, "STEAM_0:1:%u", output2[z]);
+		printf("%u %s\n", jsoni, outputstr);
 		if (jsonfile)
 			outjson[index].push_back(outputstr);
 	}
@@ -388,7 +388,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (!command_line)
-		printf("BYE!");
+		printf("BYE!\n");
 
 	delete[] source;
 	delete[] contexts;
