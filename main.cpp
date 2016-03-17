@@ -5,39 +5,51 @@
 #include <string>
 #include <atomic>
 #include <thread>
+#include <memory>
+#include <fstream>
 #include "json.hpp"
 
+#define count 0xFFFFFFFF
 
-#define count 200000000
-const cl_uint threads_at_once = 1;
+template <typename T>
+std::unique_ptr<T[]> create_ptr(size_t size)
+{
+	return std::unique_ptr<T[]>(new T[size]);
+}
+template <typename T>
+std::unique_ptr<T[]> create_ptr(cl_uint size)
+{
+	return create_ptr<T>((size_t) size);
+}
+template <typename T>
+std::unique_ptr<T[]> create_ptr(int size)
+{
+	return create_ptr<T>((size_t) size);
+}
 
 using json = nlohmann::json;
 
-bool fcanaccess(const char *file)
+bool fcanaccess(std::string file)
 {
-
-	FILE *f = fopen(file, "wb");
-	if (f)
-		fclose(f);
-
-	return f != 0;
+	std::ofstream f(file, std::ofstream::app | std::ofstream::binary);
+	return f.good() && f.is_open();
 }
 
-char *fread(const char *file, size_t *outlen)
+std::string fread(std::string file)
 {
+	try 
+	{
+		std::ifstream f(file, std::ifstream::binary);
 
-	FILE *f = fopen(file, "rb");
-	if (!f)
-		return 0;
-
-	fseek(f, 0, SEEK_END);
-	long len = ftell(f);
-	char *out = new char[len + 1];
-	fseek(f, 0, SEEK_SET);
-	fread(out, 1, len, f);
-	*outlen = len;
-	out[len] = 0;
-	return out;
+		std::stringstream stream;
+		stream << f.rdbuf();
+		std::string ret(stream.str());
+		return ret;
+	}
+	catch(...)
+	{
+		return "";
+	}
 }
 uint32_t crc32_bitwise(const void* data, cl_uint length)
 {
@@ -66,21 +78,17 @@ void clGetDeviceName(std::string &str, cl_device_id id)
 {
 	size_t info_size;
 	clGetDeviceInfo(id, CL_DEVICE_NAME, 0, NULL, &info_size);
-	char *name = new char[info_size+1];
-	clGetDeviceInfo(id, CL_DEVICE_NAME, info_size + 1, name, NULL);
+	auto name = create_ptr<char>(info_size+1);
+	clGetDeviceInfo(id, CL_DEVICE_NAME, info_size + 1, name.get(), NULL);
 	name[info_size] = 0;
 
 	info_size;
 	clGetDeviceInfo(id, CL_DEVICE_VENDOR, 0, NULL, &info_size);
-	char *vendor = new char[info_size+1];
-	clGetDeviceInfo(id, CL_DEVICE_VENDOR, info_size + 1, vendor, NULL);
+	auto vendor = create_ptr<char>(info_size+1);
+	clGetDeviceInfo(id, CL_DEVICE_VENDOR, info_size + 1, vendor.get(), NULL);
 	vendor[info_size] = 0;
 
-	str = std::string(vendor) + " " + name;
-
-	delete[] name;
-	delete[] vendor;
-	
+	str = std::string(vendor.get()) + " " + name.get();
 }
 
 void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, cl_uint jsoni, cl_uint testfor, bool jsonfile)
@@ -163,7 +171,7 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 
 };
 
-int main(int argc, char *argv[])
+int main(int argc, char *argv_c[])
 {
 	uint32_t testfor;
 	std::string SteamID("");
@@ -173,55 +181,56 @@ int main(int argc, char *argv[])
 	unsigned char complete_fully = 0;
 	bool interactive = false;
 	bool jsonfile = false;
-	if (argc == 3)
+
+	auto argv = create_ptr<std::string>(argc);
+	for (int i = 0; i < argc; i++)
+		argv[i] = std::string(argv_c[i]);
+
+	if (argc > 1)
 	{
-		if (!strcmp(argv[1], "-sid"))
+		if (argv[1] == "-json" && argc == 4)
 		{
-			command_line = true;
+			jsonfile = true;
+
+			std::string jsontext = fread(argv[2]);
+			if (jsontext == "")
+			{
+				std::cout << "Error: File " << argv[2] << " not found or is empty." << std::endl;
+				return 0;
+			}
+			if (!fcanaccess(argv[3]))
+			{
+				std::cout << "Error: File " << argv[3] << " cannot be opened." << std::endl;
+				return 0;
+			}
+			j = json::parse(jsontext.c_str());
+
+			complete_fully = 1;
+		}
+		else if (argv[1] == "-sid" && argc == 3)
+		{
 			SteamID = argv[2];
 			SteamID = "gm_" + SteamID;
 			testfor = crc32_bitwise(SteamID.c_str(), SteamID.length());
 		}
-		else if (!strcmp(argv[1], "-uid"))
+		else if (argv[1] == "-uid" && argc == 3)
 		{
-
-			sscanf(argv[2], "%u", &testfor);
+			sscanf(argv[2].c_str(), "%u", &testfor);
 			testfor = ~testfor;
-			command_line = true;
 			complete_fully = 1;
-
-		} 
-
-	}
-	else if (argc == 2 && !strcmp(argv[1], "-interactive"))
-	{
-		interactive = true;
-		command_line = true;
-		complete_fully = 1;
-	}
-	else if (argc == 4 && !strcmp(argv[1], "-json"))
-	{
-
-		jsonfile = true;
-		command_line = true;
-
-		size_t jsonlen;
-		char *jsontext = fread(argv[2], &jsonlen);
-		if (!jsontext)
+		}
+		else if (argv[1] == "-interactive" && argc == 2)
 		{
-			printf("Error: File %s not found.\n", argv[2]);
+			interactive = true;
+			complete_fully = 1;
+		}
+		else
+		{
+			printf("Invalid arguments!\n");
 			return 0;
 		}
-		if (!fcanaccess(argv[3]))
-		{
-			printf("Error: File %s cannot be opened.\n", argv[3]);
-			return 0;
-		}
-		j = json::parse(jsontext);
-
-		delete[] jsontext;
-		complete_fully = 1;
-
+			
+		command_line = true;
 	}
 
 	cl_uint numPlatforms;
@@ -239,20 +248,19 @@ int main(int argc, char *argv[])
 		printf("Error: numPlatforms == 0\n");
 		return 0;
 	}
-	cl_platform_id* platforms = new cl_platform_id[numPlatforms];
-	check(clGetPlatformIDs(numPlatforms, platforms, NULL));
+	auto platforms = create_ptr<cl_platform_id>(numPlatforms);
+	check(clGetPlatformIDs(numPlatforms, platforms.get(), NULL));
 	printf("%u platforms.\n", numPlatforms);
 
 
-	cl_uint      numDevices = 0;
-	cl_uint      *numDevicesPlatform = new cl_uint[numPlatforms];
-	cl_device_id *devices;
+	cl_uint numDevices = 0;
+	auto    numDevicesPlatform = create_ptr<cl_uint>(numPlatforms);
 	for (cl_uint i = 0; i < numPlatforms; i++)
 	{
 		check(clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, 0, NULL, &numDevicesPlatform[i]));
 		numDevices += numDevicesPlatform[i];
 	}
-	devices = new cl_device_id[numDevices];
+	auto devices = create_ptr<cl_device_id>(numDevices);
 	
 	cl_uint devices_total = 0;
 
@@ -262,13 +270,10 @@ int main(int argc, char *argv[])
 		devices_total += numDevicesPlatform[i];
 	}
 
-	delete[] numDevicesPlatform;
 
+	std::string sourcestr = fread("opencl_crc.cl");
 
-	size_t codelen;
-	const char *source = fread("opencl_crc.cl", &codelen);
-
-	if (!source)
+	if (sourcestr == "")
 	{
 
 		printf("Error: Couldn't find opencl file, 'opencl_crc.cl'. Try replacing it with the correct version.\n");
@@ -286,11 +291,13 @@ int main(int argc, char *argv[])
 		testfor = crc32_bitwise(SteamID.c_str(), SteamID.length());
 	}
 
-	cl_command_queue *commandQueues = new cl_command_queue[numDevices];
-	auto kernels = new cl_kernel[numDevices][2];
-	cl_program *programs = new cl_program[numDevices];
-	cl_context *contexts = new cl_context[numDevices];
-	cl_mem *mems = new cl_mem[numDevices];
+	auto commandQueues = create_ptr<cl_command_queue>(numDevices);
+	auto kernels = create_ptr<cl_kernel[2]>(numDevices);
+	auto programs = create_ptr<cl_program>(numDevices);
+	auto contexts = create_ptr<cl_context>(numDevices);
+	auto mems = create_ptr<cl_mem>(numDevices);
+	size_t codelen = sourcestr.length();
+	const char *source = sourcestr.c_str();
 	for (cl_uint i = 0; i < numDevices; i++)
 	{
 		std::string name;
@@ -330,12 +337,12 @@ int main(int argc, char *argv[])
 
 	if (jsonfile) // json mode
 	{
-		cl_uint *crc_array = new cl_uint[j.size()];
+		auto crc_array = create_ptr<cl_uint>(j.size());
 		for (cl_uint i = 0; i < j.size(); i++)
 			crc_array[i] = ~j[i].get<cl_uint>();
 		cl_uint crc_array_size = j.size();
 
-		std::thread *threads = new std::thread[numDevices];
+		auto threads = create_ptr<std::thread>(numDevices);
 		std::atomic<cl_uint> jsoni(0);
 
 		for (cl_uint i = 0; i < numDevices; i++)
@@ -350,7 +357,6 @@ int main(int argc, char *argv[])
 		}
 		for (cl_uint i = 0; i < numDevices; i++)
 			threads[i].join();
-		delete[] crc_array;
 	}
 	else
 		while (1)
@@ -390,21 +396,10 @@ int main(int argc, char *argv[])
 	if (!command_line)
 		printf("BYE!\n");
 
-	delete[] source;
-	delete[] contexts;
-	delete[] programs;
-	delete[] kernels;
-	delete[] commandQueues;
-	delete[] mems;
-	delete[] devices;
-
-
 	if (jsonfile)
 	{
-		FILE *f = fopen(argv[3], "wb");
-		std::string dump = outjson.dump();
-		fwrite(dump.c_str(), 1, dump.length(), f);
-		fclose(f);
+		std::ofstream f(argv[3], std::ofstream::binary);
+		f << outjson.dump();
 	}
 
 	return 0;
