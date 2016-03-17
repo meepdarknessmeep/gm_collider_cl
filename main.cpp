@@ -23,7 +23,7 @@ bool fcanaccess(const char *file)
 	return f != 0;
 }
 
-char *fread(const char *file, cl_uint *outlen)
+char *fread(const char *file, size_t *outlen)
 {
 
 	FILE *f = fopen(file, "rb");
@@ -265,7 +265,7 @@ int main(int argc, char *argv[])
 	delete[] numDevicesPlatform;
 
 
-	cl_uint codelen;
+	size_t codelen;
 	const char *source = fread("opencl_crc.cl", &codelen);
 
 	if (!source)
@@ -275,7 +275,6 @@ int main(int argc, char *argv[])
 		return 0;
 
 	}
-	cl_uint sourceSize[] = { codelen };
 
 	if (!command_line)
 	{
@@ -298,7 +297,7 @@ int main(int argc, char *argv[])
 		clGetDeviceName(name, devices[i]);
 		printf("Using %s\n", name.c_str());
 		contexts[i] = clCreateContext(NULL, 1, &devices[i], NULL, NULL, NULL);
-		programs[i] = clCreateProgramWithSource(contexts[i], 1, &source, sourceSize, NULL);
+		programs[i] = clCreateProgramWithSource(contexts[i], 1, &source, &codelen, NULL);
 		status = check(clBuildProgram(programs[i], 1, &devices[i], NULL, NULL, NULL));
 		if (status != CL_SUCCESS)
 		{
@@ -306,7 +305,7 @@ int main(int argc, char *argv[])
 			clGetProgramBuildInfo(programs[i], devices[0], CL_PROGRAM_BUILD_STATUS,
 				sizeof(cl_build_status), &status, NULL);
 
-			cl_uint logSize;
+			size_t logSize;
 			// check build log
 			clGetProgramBuildInfo(programs[i], devices[0],
 				CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
