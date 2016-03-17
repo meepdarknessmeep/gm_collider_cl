@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 		jsonfile = true;
 		command_line = true;
 
-		cl_uint jsonlen;
+		size_t jsonlen;
 		char *jsontext = fread(argv[2], &jsonlen);
 		if (!jsontext)
 		{
