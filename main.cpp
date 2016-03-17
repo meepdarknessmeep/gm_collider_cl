@@ -9,7 +9,7 @@
 
 
 #define count 200000000
-const size_t threads_at_once = 1;
+const cl_uint threads_at_once = 1;
 
 using json = nlohmann::json;
 
@@ -23,7 +23,7 @@ bool fcanaccess(const char *file)
 	return f != 0;
 }
 
-char *fread(const char *file, size_t *outlen)
+char *fread(const char *file, cl_uint *outlen)
 {
 
 	FILE *f = fopen(file, "rb");
@@ -39,7 +39,7 @@ char *fread(const char *file, size_t *outlen)
 	out[len] = 0;
 	return out;
 }
-uint32_t crc32_bitwise(const void* data, size_t length)
+uint32_t crc32_bitwise(const void* data, cl_uint length)
 {
 	uint32_t crc = ~0; // same as previousCrc32 ^ 0xFFFFFFFF
 	const uint8_t* current = (const uint8_t*)data;
@@ -83,11 +83,11 @@ void clGetDeviceName(std::string &str, cl_device_id id)
 	
 }
 
-void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, size_t jsoni, size_t testfor, bool jsonfile)
+void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, cl_uint jsoni, cl_uint testfor, bool jsonfile)
 {
-	const size_t max_finds = 100;
+	const cl_uint max_finds = 100;
 
-	const size_t ARRAY_LEN = max_finds * 4;
+	const cl_uint ARRAY_LEN = max_finds * 4;
 	cl_mem crcOutput = clCreateBuffer(context, CL_MEM_WRITE_ONLY, ARRAY_LEN, NULL, NULL);
 	cl_mem crcOutput2 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, ARRAY_LEN, NULL, NULL);
 	cl_mem crcCount1 = clCreateBuffer(context, CL_MEM_READ_WRITE, 4, NULL, NULL);
@@ -95,7 +95,7 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 
 	
 	unsigned int FindCount = 0, FindCount2 = 0;
-	size_t testfor2 = testfor;
+	cl_uint testfor2 = testfor;
 
 	cl_mem crcTestFor = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 4, &testfor2, NULL);
 	cl_mem crcFindCount = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
@@ -111,7 +111,7 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	check(clSetKernelArg(kernels[0], 3, sizeof(cl_mem), (void *)&crcFindCount));
 	check(clSetKernelArg(kernels[1], 3, sizeof(cl_mem), (void *)&crcFindCount2));
 
-	size_t global_work_size[1] = { count };
+	cl_uint global_work_size[1] = { count };
 
 	cl_event Events[4];
 	check(clEnqueueNDRangeKernel(commandQueue, kernels[0], 1, NULL, global_work_size, NULL, 0, NULL, &Events[0]));
@@ -120,7 +120,7 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	check(clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_TRUE, 0, 4, &FindCount2, 1, &Events[0], &Events[2]));
 	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, 1, &Events[1], &Events[3]));
 
-	size_t output1[max_finds], output2[max_finds];
+	cl_uint output1[max_finds], output2[max_finds];
 	if (FindCount > 0)
 		check(clEnqueueReadBuffer(commandQueue, crcOutput, CL_TRUE, 0, 4 * FindCount, output1, 1, &Events[2], NULL));
 	if (FindCount2 > 0)
@@ -132,14 +132,14 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	if (jsonfile)
 		outjson[index] = json::array();
 
-	for (size_t z = 0; z < FindCount; z++)
+	for (cl_uint z = 0; z < FindCount; z++)
 	{
 		sprintf(outputstr, "%u STEAM_0:0:%u", jsoni, output1[z]);
 		printf("%s%s\n", command_line ? "" : "Found: ", outputstr);
 		if (jsonfile)
 			outjson[index].push_back(outputstr);
 	}
-	for (size_t z = 0; z < FindCount2; z++)
+	for (cl_uint z = 0; z < FindCount2; z++)
 	{
 		sprintf(outputstr, "%u STEAM_0:1:%u", jsoni, output2[z]);
 		printf("%s%s\n", command_line ? "" : "Found: ", outputstr);
@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
 		jsonfile = true;
 		command_line = true;
 
-		size_t jsonlen;
+		cl_uint jsonlen;
 		char *jsontext = fread(argv[2], &jsonlen);
 		if (!jsontext)
 		{
@@ -265,7 +265,7 @@ int main(int argc, char *argv[])
 	delete[] numDevicesPlatform;
 
 
-	size_t codelen;
+	cl_uint codelen;
 	const char *source = fread("opencl_crc.cl", &codelen);
 
 	if (!source)
@@ -275,7 +275,7 @@ int main(int argc, char *argv[])
 		return 0;
 
 	}
-	size_t sourceSize[] = { codelen };
+	cl_uint sourceSize[] = { codelen };
 
 	if (!command_line)
 	{
@@ -306,7 +306,7 @@ int main(int argc, char *argv[])
 			clGetProgramBuildInfo(programs[i], devices[0], CL_PROGRAM_BUILD_STATUS,
 				sizeof(cl_build_status), &status, NULL);
 
-			size_t logSize;
+			cl_uint logSize;
 			// check build log
 			clGetProgramBuildInfo(programs[i], devices[0],
 				CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
@@ -331,19 +331,19 @@ int main(int argc, char *argv[])
 
 	if (jsonfile) // json mode
 	{
-		size_t *crc_array = new size_t[j.size()];
-		for (size_t i = 0; i < j.size(); i++)
-			crc_array[i] = ~j[i].get<size_t>();
-		size_t crc_array_size = j.size();
+		cl_uint *crc_array = new cl_uint[j.size()];
+		for (cl_uint i = 0; i < j.size(); i++)
+			crc_array[i] = ~j[i].get<cl_uint>();
+		cl_uint crc_array_size = j.size();
 
 		std::thread *threads = new std::thread[numDevices];
-		std::atomic<size_t> jsoni(0);
+		std::atomic<cl_uint> jsoni(0);
 
 		for (cl_uint i = 0; i < numDevices; i++)
 		{
 			threads[i] = std::thread([i, &crc_array_size, &mems, &commandQueues, &kernels, command_line, &programs, &outjson, &jsoni, &contexts, jsonfile, &crc_array]()
 			{
-				size_t currentjsoni;
+				cl_uint currentjsoni;
 				while((currentjsoni = jsoni.fetch_add(1)) < crc_array_size)
 					Thread(mems[i], commandQueues[i], kernels[i], command_line, programs[i], outjson, contexts[i], currentjsoni, crc_array[currentjsoni], jsonfile);
 
