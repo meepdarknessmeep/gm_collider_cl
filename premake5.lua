@@ -20,8 +20,9 @@ solution "gm_collider_cl"
 			includedirs ( os.getenv("AMDAPPSDKROOT").."/include" )
 			libdirs ( os.getenv("AMDAPPSDKROOT").."/lib/x86_64" )
 		end
-		links { "OpenCL", "pthread" }
+		links "OpenCL"
 		if (os.get() == "linux") then
+			links "pthread"
 			buildoptions "-std=c++11 -Wl,-rpath=."
 		end
 		
