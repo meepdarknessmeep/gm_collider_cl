@@ -64,7 +64,7 @@ cl_int check(cl_int status)
 
 void clGetDeviceName(std::string &str, cl_device_id id)
 {
-	cl_uint info_size;
+	size_t info_size;
 	clGetDeviceInfo(id, CL_DEVICE_NAME, 0, NULL, &info_size);
 	char *name = new char[info_size+1];
 	clGetDeviceInfo(id, CL_DEVICE_NAME, info_size + 1, name, NULL);
@@ -111,7 +111,7 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	check(clSetKernelArg(kernels[0], 3, sizeof(cl_mem), (void *)&crcFindCount));
 	check(clSetKernelArg(kernels[1], 3, sizeof(cl_mem), (void *)&crcFindCount2));
 
-	cl_uint global_work_size[1] = { count };
+	size_t global_work_size[1] = { count };
 
 	cl_event Events[4];
 	check(clEnqueueNDRangeKernel(commandQueue, kernels[0], 1, NULL, global_work_size, NULL, 0, NULL, &Events[0]));
