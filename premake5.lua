@@ -1,6 +1,6 @@
 solution "gm_collider_cl"
 	language     "C++"
-	architecture "x32"
+	architecture "x64"
 	location     "project"
 	targetdir    "bin"
 
@@ -16,8 +16,10 @@ solution "gm_collider_cl"
 
 		kind "ConsoleApp"
 		files { "*.hpp", "*cpp" }
-		includedirs ( os.getenv("AMDAPPSDKROOT").."/include" )
-		libdirs ( os.getenv("AMDAPPSDKROOT").."/lib/x86" )
+		if (os.getenv("AMDAPPSDKROOT")) then
+			includedirs ( os.getenv("AMDAPPSDKROOT").."/include" )
+			libdirs ( os.getenv("AMDAPPSDKROOT").."/lib/x86_64" )
+		end
 		links { "OpenCL", "pthread" }
 		if (os.get() == "linux") then
 			buildoptions "-std=c++11 -Wl,-rpath=."
