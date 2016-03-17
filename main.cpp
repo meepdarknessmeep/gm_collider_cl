@@ -62,6 +62,27 @@ cl_int check(cl_int status)
 	return status;
 }
 
+void clGetDeviceName(std::string &str, cl_device_id id)
+{
+	cl_uint info_size;
+	clGetDeviceInfo(id, CL_DEVICE_NAME, 0, NULL, &info_size);
+	char *name = new char[info_size+1];
+	clGetDeviceInfo(id, CL_DEVICE_NAME, info_size + 1, name, NULL);
+	name[info_size] = 0;
+
+	info_size;
+	clGetDeviceInfo(id, CL_DEVICE_VENDOR, 0, NULL, &info_size);
+	char *vendor = new char[info_size+1];
+	clGetDeviceInfo(id, CL_DEVICE_VENDOR, info_size + 1, vendor, NULL);
+	vendor[info_size] = 0;
+
+	str = std::string(vendor) + " " + name;
+
+	delete[] name;
+	delete[] vendor;
+	
+}
+
 void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, size_t jsoni, size_t testfor, bool jsonfile)
 {
 	const size_t max_finds = 100;
@@ -203,8 +224,7 @@ int main(int argc, char *argv[])
 
 	}
 
-	cl_uint numPlatforms;	//the NO. of platforms
-	cl_platform_id platform = NULL;	//the chosen platform
+	cl_uint numPlatforms;
 	cl_int status = check(clGetPlatformIDs(0, NULL, &numPlatforms));
 	if (status != CL_SUCCESS)
 	{
@@ -214,29 +234,35 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	/*For clarity, choose the first available platform. */
-	if (numPlatforms > 0)
+	if (numPlatforms == 0) 
 	{
-		cl_platform_id* platforms = (cl_platform_id*)malloc(numPlatforms* sizeof(cl_platform_id));
-		check(clGetPlatformIDs(numPlatforms, platforms, NULL));
-		platform = platforms[0];
-		free(platforms);
-	}
-
-	/*Step 2:Query the platform and choose the first GPU device if has one.Otherwise use the CPU as device.*/
-	cl_uint				numDevices = 0;
-	cl_device_id        *devices;
-	check(clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &numDevices));
-	if (numDevices == 0)	//no GPU available.
-	{
-		printf("Error: No GPU device available. TODO: Allow CPU\n");
+		printf("Error: numPlatforms == 0\n");
 		return 0;
 	}
-	else
+	cl_platform_id* platforms = new cl_platform_id[numPlatforms];
+	check(clGetPlatformIDs(numPlatforms, platforms, NULL));
+	printf("%u platforms.\n", numPlatforms);
+
+
+	cl_uint      numDevices = 0;
+	cl_uint      *numDevicesPlatform = new cl_uint[numPlatforms];
+	cl_device_id *devices;
+	for (cl_uint i = 0; i < numPlatforms; i++)
 	{
-		devices = (cl_device_id*)malloc(numDevices * sizeof(cl_device_id));
-		check(clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, numDevices, devices, NULL));
+		check(clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, 0, NULL, &numDevicesPlatform[i]));
+		numDevices += numDevicesPlatform[i];
 	}
+	devices = new cl_device_id[numDevices];
+	
+	cl_uint devices_total = 0;
+
+	for (cl_uint i = 0; i < numPlatforms; i++)
+	{
+		check(clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, numDevicesPlatform[i], &devices[devices_total], NULL));
+		devices_total += numDevicesPlatform[i];
+	}
+
+	delete[] numDevicesPlatform;
 
 
 	size_t codelen;
@@ -268,6 +294,9 @@ int main(int argc, char *argv[])
 	cl_mem *mems = new cl_mem[numDevices];
 	for (cl_uint i = 0; i < numDevices; i++)
 	{
+		std::string name;
+		clGetDeviceName(name, devices[i]);
+		printf("Using %s\n", name.c_str());
 		contexts[i] = clCreateContext(NULL, 1, &devices[i], NULL, NULL, NULL);
 		programs[i] = clCreateProgramWithSource(contexts[i], 1, &source, sourceSize, NULL);
 		status = check(clBuildProgram(programs[i], 1, &devices[i], NULL, NULL, NULL));
@@ -368,6 +397,7 @@ int main(int argc, char *argv[])
 	delete[] kernels;
 	delete[] commandQueues;
 	delete[] mems;
+	delete[] devices;
 
 
 	if (jsonfile)
