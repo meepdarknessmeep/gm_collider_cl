@@ -26,20 +26,10 @@ T compile_numdigits(T c) { return (c > 0 ? 1 + compile_numdigits(c/10) : 0); }
 	}
 
 
-template <typename T>
-std::unique_ptr<T[]> create_ptr(size_t size)
+template <typename T, typename Q>
+std::unique_ptr<T[]> create_ptr(Q size)
 {
 	return std::unique_ptr<T[]>(new T[size]);
-}
-template <typename T>
-std::unique_ptr<T[]> create_ptr(cl_uint size)
-{
-	return create_ptr<T>((size_t) size);
-}
-template <typename T>
-std::unique_ptr<T[]> create_ptr(int size)
-{
-	return create_ptr<T>((size_t) size);
 }
 
 using json = nlohmann::json;
