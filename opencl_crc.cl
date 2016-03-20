@@ -1,4 +1,4 @@
-#define COMMON_ARGS __global uint *output, __global uint *TestFor, __global uchar *complete, __global uint *total
+#define COMMON_ARGS global uint *output, global uint *TestFor, global uchar *complete, global uint *total
 
 #define STEAM_0_0 0xE9348804
 #define STEAM_0_1 0xF02FB945
@@ -142,66 +142,3 @@ COMMON_BODY(crc_2d, 10, {
 COMMON_BODY(crc_1d, 1, {
 	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (chars + '0')];
 })
-
-__kernel void crc(__global uint *output, __global uint *TestFor, __global uchar *complete, __global uint *total)
-{
-	uint now = get_global_id(0);
-
-	// gm_STEAM_0:0:
-	uint crcval = 0xE9348804;
-
-	uint mulval = 1000000000;
-
-	while (now / mulval == 0)
-		mulval /= 10;
-	
-	while (mulval != 0)
-	{
-		uchar temp = (uchar)(now / mulval);
-		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ (temp + '0')];
-		now -= mulval * temp;
-		mulval /= 10;
-	}
-	if (*complete)
-	{
-		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ '_'];
-		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ 'g'];
-		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ 'm'];
-	}
-
-	if (crcval == *TestFor)
-	{
-		output[atomic_inc(total)] = get_global_id(0);
-	}
-}
-__kernel void crc2(__global uint *output, __global uint *TestFor, __global uchar *complete, __global uint *total)
-{
-	uint now = get_global_id(0);
-
-	// gm_STEAM_0:1:
-	uint crcval = 0xF02FB945;
-
-	uint mulval = 1000000000;
-
-	while (now / mulval == 0)
-		mulval /= 10;
-	
-	while (mulval != 0)
-	{
-		uchar temp = (uchar)(now / mulval);
-		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ (temp + '0')];
-		now -= mulval * temp;
-		mulval /= 10;
-	}
-	if (*complete)
-	{
-		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ '_'];
-		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ 'g'];
-		crcval = (crcval >> 8) ^ lookup[(crcval & 0xFF) ^ 'm'];
-	}
-
-	if (crcval == *TestFor)
-	{
-		output[atomic_inc(total)] = get_global_id(0);
-	}
-}
