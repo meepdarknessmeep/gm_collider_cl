@@ -9,7 +9,7 @@
 #include <fstream>
 #include "json.hpp"
 
-const size_t count = 400000000 + 1; // always add one
+const size_t count = 400000000;
 
 template <typename T> 
 T compile_pow(T c, T count) { return (count > 0 ? c * compile_pow<T>(c, count - 1) : 1); }
@@ -186,7 +186,7 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	size_t waitindex = RunKernel(mem, commandQueue, crcOutput, crcOutput2, crcCount1, crcCount2, crcTestFor, crcFindCount, crcFindCount2, kernels, Events, count);
 
 
-	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, waitindex * 2, Events, &Events[20]));
+	check(clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_TRUE, 0, 4, &FindCount2, waitindex * 2, Events, &Events[20]));
 
 	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, waitindex * 2, Events, &Events[21]));
 
