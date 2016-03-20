@@ -96,8 +96,8 @@ void clGetDeviceName(std::string &str, cl_device_id id)
 	str = std::string(vendor.get()) + " " + name.get();
 }
 
-size_t RunKernel(cl_mem &mem, cl_command_queue &commandQueue, cl_mem &crcOutput, cl_mem &crcOutput2, 
-		cl_mem &crcCount1, cl_mem &crcCount2, cl_mem &crcTestFor, cl_mem &crcFindCount, cl_mem &crcFindCount2, 
+size_t RunKernel(cl_mem &mem, cl_command_queue &commandQueue, cl_mem &crcOutput, cl_mem &crcOutput2,
+		cl_mem &crcTestFor, cl_mem &crcFindCount, cl_mem &crcFindCount2, 
 		cl_kernel *kernels, cl_event *Events, size_t Count)
 {
 /*
@@ -153,48 +153,35 @@ size_t RunKernel(cl_mem &mem, cl_command_queue &commandQueue, cl_mem &crcOutput,
 	return ++index;
 }
 
-std::thread Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, cl_uint jsoni, cl_uint testfor, bool jsonfile)
+std::thread Thread(cl_mem *mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, cl_uint jsoni, cl_uint testfor, bool jsonfile)
 {
 	const cl_uint max_finds = 100;
-
-	const cl_uint ARRAY_LEN = max_finds * 4;
-	cl_mem crcOutput = clCreateBuffer(context, CL_MEM_WRITE_ONLY, ARRAY_LEN, NULL, NULL);
-	cl_mem crcOutput2 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, ARRAY_LEN, NULL, NULL);
-	cl_mem crcCount1 = clCreateBuffer(context, CL_MEM_READ_WRITE, 4, NULL, NULL);
-	cl_mem crcCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE, 4, NULL, NULL);
-
-	
+	cl_uint FindCount = 0, FindCount2 = 0;
+	cl_event Events[24];
 	cl_uint testfor2 = testfor;
+	cl_uint *output1 = new cl_uint[max_finds], *output2 = new cl_uint[max_finds];
 
 	cl_mem crcTestFor = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 4, &testfor2, NULL);
-	cl_uint FindCount = 0, FindCount2 = 0;
 	cl_mem crcFindCount = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
 	cl_mem crcFindCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
 
-	cl_event Events[24];
 
-	size_t waitindex = RunKernel(mem, commandQueue, crcOutput, crcOutput2, crcCount1, crcCount2, crcTestFor, crcFindCount, crcFindCount2, kernels, Events, count);
-
+	size_t waitindex = RunKernel(mem[0], commandQueue, mem[1], mem[2], crcTestFor, crcFindCount, crcFindCount2, kernels, Events, count);
 
 
 	check(clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_FALSE, 0, 4, &FindCount2, waitindex * 2, Events, &Events[waitindex * 2]));
-
 	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_FALSE, 0, 4, &FindCount, waitindex * 2, Events, &Events[waitindex * 2 + 1]));
 
-	cl_uint *output1 = new cl_uint[max_finds], *output2 = new cl_uint[max_finds];
-	check(clEnqueueReadBuffer(commandQueue, crcOutput, CL_FALSE, 0, 4 * max_finds, output1, 1, &Events[waitindex * 2], &Events[waitindex * 2 + 2]));
-	check(clEnqueueReadBuffer(commandQueue, crcOutput2, CL_FALSE, 0, 4 * max_finds, output2, 1, &Events[waitindex * 2 + 1], &Events[waitindex * 2 + 3]));
-
+	check(clEnqueueReadBuffer(commandQueue, mem[1], CL_FALSE, 0, 4 * max_finds, output1, 1, &Events[waitindex * 2], &Events[waitindex * 2 + 2]));
+	check(clEnqueueReadBuffer(commandQueue, mem[2], CL_FALSE, 0, 4 * max_finds, output2, 1, &Events[waitindex * 2 + 1], &Events[waitindex * 2 + 3]));
 
 
 	clWaitForEvents(waitindex * 2 + 4, Events); // wait for kernels
+
 	for (size_t i = 0; i < waitindex * 2 + 4; i++)
 		clReleaseEvent(Events[i]);
+
 	check(clReleaseMemObject(crcTestFor));
-	check(clReleaseMemObject(crcCount1));
-	check(clReleaseMemObject(crcCount2));
-	check(clReleaseMemObject(crcOutput));
-	check(clReleaseMemObject(crcOutput2));
 	check(clReleaseMemObject(crcFindCount));
 	check(clReleaseMemObject(crcFindCount2));
 
@@ -213,6 +200,7 @@ std::thread Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kerne
 			if (jsonfile)
 				outjson[index].push_back(outputstr);
 		}
+
 		for (cl_uint z = 0; z < FindCount2; z++)
 		{
 			sprintf(outputstr, "STEAM_0:1:%u", output2[z]);
@@ -220,6 +208,7 @@ std::thread Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kerne
 			if (jsonfile)
 				outjson[index].push_back(outputstr);
 		}
+
 		delete[] output1;
 		delete[] output2;
 	}, output1, output2);
@@ -312,7 +301,7 @@ int main(int argc, char *argv_c[])
 	auto    numDevicesPlatform = create_ptr<cl_uint>(numPlatforms);
 	for (cl_uint i = 0; i < numPlatforms; i++)
 	{
-		cl_uint status = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU, 0, NULL, &numDevicesPlatform[i]);
+		cl_uint status = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, 0, NULL, &numDevicesPlatform[i]);
 		if (status != CL_SUCCESS && status != CL_DEVICE_NOT_FOUND)
 			check(status);
 		numDevices += numDevicesPlatform[i];
@@ -324,7 +313,7 @@ int main(int argc, char *argv_c[])
 	for (cl_uint i = 0; i < numPlatforms; i++)
 	{
 		if (numDevicesPlatform[i] > 0)
-			check(clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU, numDevicesPlatform[i], &devices[devices_total], NULL));
+			check(clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, numDevicesPlatform[i], &devices[devices_total], NULL));
 		devices_total += numDevicesPlatform[i];
 	}
 
@@ -353,7 +342,7 @@ int main(int argc, char *argv_c[])
 	auto kernels = create_ptr<cl_kernel[20]>(numDevices);
 	auto programs = create_ptr<cl_program>(numDevices);
 	auto contexts = create_ptr<cl_context>(numDevices);
-	auto mems = create_ptr<cl_mem>(numDevices);
+	auto mems = create_ptr<cl_mem[3]>(numDevices);
 	size_t codelen = sourcestr.length();
 	const char *source = sourcestr.c_str();
 	for (cl_uint i = 0; i < numDevices; i++)
@@ -393,7 +382,12 @@ int main(int argc, char *argv_c[])
 		IMPORT_KERNEL(kernels[i], 7, crc_8d)
 		IMPORT_KERNEL(kernels[i], 8, crc_9d)
 		IMPORT_KERNEL(kernels[i], 9, crc_10d)
-		mems[i] = clCreateBuffer(contexts[i], CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 1, &complete_fully, NULL);
+		mems[i][0] = clCreateBuffer(contexts[i], CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 1, &complete_fully, NULL);
+		const cl_uint max_finds = 100;
+
+		const cl_uint ARRAY_LEN = max_finds * 4;
+		mems[i][1] = clCreateBuffer(contexts[i], CL_MEM_WRITE_ONLY, ARRAY_LEN, NULL, NULL);
+		mems[i][2]  = clCreateBuffer(contexts[i], CL_MEM_WRITE_ONLY, ARRAY_LEN, NULL, NULL);
 
 
 		commandQueues[i] = clCreateCommandQueue(contexts[i], devices[i], 0, NULL);
@@ -456,7 +450,8 @@ int main(int argc, char *argv_c[])
 	{
 		for (size_t q = 0; q < 20; q++)
 			check(clReleaseKernel(kernels[i][q]));
-		check(clReleaseMemObject(mems[i]));
+		for (size_t q = 0; q < 3; q++)
+			check(clReleaseMemObject(mems[i][q]));
 		check(clReleaseCommandQueue(commandQueues[i]));
 		check(clReleaseProgram(programs[i]));
 		check(clReleaseContext(contexts[i]));
