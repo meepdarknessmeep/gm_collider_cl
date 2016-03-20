@@ -9,7 +9,22 @@
 #include <fstream>
 #include "json.hpp"
 
-#define count 0xFFFFFFFF
+const size_t count = 400000000 + 1; // always add one
+
+template <typename T> 
+T compile_pow(T c, T count) { return (count > 0 ? c * compile_pow<T>(c, count - 1) : 1); }
+template <typename T> 
+T compile_numdigits(T c) { return (c > 0 ? 1 + compile_numdigits(c/10) : 0); }
+
+#define IMPORT_KERNEL(destination, index, name) \
+	{ \
+		cl_int STATUS_##name ; \
+		destination[index * 2] = clCreateKernel(programs[i], #name "_0", &STATUS_##name); \
+		check(STATUS_##name); \
+		destination[index * 2 + 1] = clCreateKernel(programs[i], #name "_1", &STATUS_##name); \
+		check(STATUS_##name); \
+	}
+
 
 template <typename T>
 std::unique_ptr<T[]> create_ptr(size_t size)
@@ -91,6 +106,63 @@ void clGetDeviceName(std::string &str, cl_device_id id)
 	str = std::string(vendor.get()) + " " + name.get();
 }
 
+size_t RunKernel(cl_mem &mem, cl_command_queue &commandQueue, cl_mem &crcOutput, cl_mem &crcOutput2, 
+		cl_mem &crcCount1, cl_mem &crcCount2, cl_mem &crcTestFor, cl_mem &crcFindCount, cl_mem &crcFindCount2, 
+		cl_kernel *kernels, cl_event *Events, size_t Count)
+{
+/*
+    size_t Count = 100110;
+    
+    size_t max_digits = compile_numdigits(Count);
+    
+    for (size_t q = 1; q < max_digits; q++)
+        printf("%u, %u\n", q, compile_pow(size_t(10), q) - compile_pow(size_t(10), q - 1));
+        
+    printf("%u, %u\n", max_digits, Count % compile_pow(size_t(10), max_digits - 1) + 1);
+*/
+	size_t index = 0;
+	size_t max_digits = compile_numdigits(Count);
+	for (size_t q = 1; q < max_digits; q++)
+	{
+		size_t work_size = compile_pow(size_t(10), q) - compile_pow(size_t(10), q - 1);
+	
+		cl_kernel &kernel1 = kernels[(q - 1) * 2];
+		cl_kernel &kernel2 = kernels[(q - 1) * 2 + 1];
+
+		check(clSetKernelArg(kernel1, 0, sizeof(cl_mem), (void *)&crcOutput));
+		check(clSetKernelArg(kernel1, 1, sizeof(cl_mem), (void *)&crcTestFor));
+		check(clSetKernelArg(kernel1, 2, sizeof(cl_mem), (void *)&mem));
+		check(clSetKernelArg(kernel1, 3, sizeof(cl_mem), (void *)&crcFindCount));
+		check(clEnqueueNDRangeKernel(commandQueue, kernel1, 1, NULL, &work_size, NULL, 0, NULL, &Events[index * 2]));
+
+		check(clSetKernelArg(kernel2, 0, sizeof(cl_mem), (void *)&crcOutput2));
+		check(clSetKernelArg(kernel2, 1, sizeof(cl_mem), (void *)&crcTestFor));
+		check(clSetKernelArg(kernel2, 2, sizeof(cl_mem), (void *)&mem));
+		check(clSetKernelArg(kernel2, 3, sizeof(cl_mem), (void *)&crcFindCount2));
+		check(clEnqueueNDRangeKernel(commandQueue, kernel2, 1, NULL, &work_size, NULL, 0, NULL, &Events[index * 2 + 1]));
+
+		index++;
+	}
+	size_t work_size = Count % compile_pow(size_t(10), max_digits - 1) + 1;
+
+	cl_kernel &kernel1 = kernels[(max_digits - 1) * 2];
+	cl_kernel &kernel2 = kernels[(max_digits - 1) * 2 + 1];
+
+	check(clSetKernelArg(kernel1, 0, sizeof(cl_mem), (void *)&crcOutput));
+	check(clSetKernelArg(kernel1, 1, sizeof(cl_mem), (void *)&crcTestFor));
+	check(clSetKernelArg(kernel1, 2, sizeof(cl_mem), (void *)&mem));
+	check(clSetKernelArg(kernel1, 3, sizeof(cl_mem), (void *)&crcFindCount));
+	check(clEnqueueNDRangeKernel(commandQueue, kernel1, 1, NULL, &work_size, NULL, 0, NULL, &Events[index * 2]));
+
+	check(clSetKernelArg(kernel2, 0, sizeof(cl_mem), (void *)&crcOutput2));
+	check(clSetKernelArg(kernel2, 1, sizeof(cl_mem), (void *)&crcTestFor));
+	check(clSetKernelArg(kernel2, 2, sizeof(cl_mem), (void *)&mem));
+	check(clSetKernelArg(kernel2, 3, sizeof(cl_mem), (void *)&crcFindCount2));
+	check(clEnqueueNDRangeKernel(commandQueue, kernel2, 1, NULL, &work_size, NULL, 0, NULL, &Events[index * 2 + 1]));
+
+	return ++index;
+}
+
 void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, cl_uint jsoni, cl_uint testfor, bool jsonfile)
 {
 	const cl_uint max_finds = 100;
@@ -109,30 +181,20 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	cl_mem crcFindCount = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
 	cl_mem crcFindCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
 
+	cl_event Events[22];
 
-	check(clSetKernelArg(kernels[0], 0, sizeof(cl_mem), (void *)&crcOutput));
-	check(clSetKernelArg(kernels[1], 0, sizeof(cl_mem), (void *)&crcOutput2));
-	check(clSetKernelArg(kernels[0], 1, sizeof(cl_mem), (void *)&crcTestFor));
-	check(clSetKernelArg(kernels[1], 1, sizeof(cl_mem), (void *)&crcTestFor));
-	check(clSetKernelArg(kernels[0], 2, sizeof(cl_mem), (void *)&mem));
-	check(clSetKernelArg(kernels[1], 2, sizeof(cl_mem), (void *)&mem));
-	check(clSetKernelArg(kernels[0], 3, sizeof(cl_mem), (void *)&crcFindCount));
-	check(clSetKernelArg(kernels[1], 3, sizeof(cl_mem), (void *)&crcFindCount2));
+	size_t waitindex = RunKernel(mem, commandQueue, crcOutput, crcOutput2, crcCount1, crcCount2, crcTestFor, crcFindCount, crcFindCount2, kernels, Events, count);
 
-	size_t global_work_size[1] = { count };
 
-	cl_event Events[4];
-	check(clEnqueueNDRangeKernel(commandQueue, kernels[0], 1, NULL, global_work_size, NULL, 0, NULL, &Events[0]));
-	check(clEnqueueNDRangeKernel(commandQueue, kernels[1], 1, NULL, global_work_size, NULL, 0, NULL, &Events[1]));
+	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, waitindex * 2, Events, &Events[20]));
 
-	check(clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_TRUE, 0, 4, &FindCount2, 1, &Events[0], &Events[2]));
-	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, 1, &Events[1], &Events[3]));
+	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, waitindex * 2, Events, &Events[21]));
 
 	cl_uint output1[max_finds], output2[max_finds];
 	if (FindCount > 0)
-		check(clEnqueueReadBuffer(commandQueue, crcOutput, CL_TRUE, 0, 4 * FindCount, output1, 1, &Events[2], NULL));
+		check(clEnqueueReadBuffer(commandQueue, crcOutput, CL_TRUE, 0, 4 * FindCount, output1, 1, &Events[20], NULL));
 	if (FindCount2 > 0)
-		check(clEnqueueReadBuffer(commandQueue, crcOutput2, CL_TRUE, 0, 4 * FindCount2, output2, 1, &Events[3], NULL));
+		check(clEnqueueReadBuffer(commandQueue, crcOutput2, CL_TRUE, 0, 4 * FindCount2, output2, 1, &Events[21], NULL));
 
 	char index[128];
 	char outputstr[128];
@@ -161,10 +223,8 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	check(clReleaseMemObject(crcTestFor));		//Release mem object.
 	check(clReleaseMemObject(crcFindCount));		//Release mem object.
 	check(clReleaseMemObject(crcFindCount2));		//Release mem object.
-	check(clReleaseEvent(Events[0]));
-	check(clReleaseEvent(Events[1]));
-	check(clReleaseEvent(Events[2]));
-	check(clReleaseEvent(Events[3]));
+	for (size_t i = 0; i < waitindex * 2; i++)
+		clReleaseEvent(Events[i]);
 
 	clFinish(commandQueue);
 
@@ -292,7 +352,7 @@ int main(int argc, char *argv_c[])
 	}
 
 	auto commandQueues = create_ptr<cl_command_queue>(numDevices);
-	auto kernels = create_ptr<cl_kernel[2]>(numDevices);
+	auto kernels = create_ptr<cl_kernel[20]>(numDevices);
 	auto programs = create_ptr<cl_program>(numDevices);
 	auto contexts = create_ptr<cl_context>(numDevices);
 	auto mems = create_ptr<cl_mem>(numDevices);
@@ -325,9 +385,16 @@ int main(int argc, char *argv_c[])
 			return 0;
 		}
 
-
-		kernels[i][0] = clCreateKernel(programs[i], "crc", NULL);
-		kernels[i][1] = clCreateKernel(programs[i], "crc2", NULL);
+		IMPORT_KERNEL(kernels[i], 0, crc_1d)
+		IMPORT_KERNEL(kernels[i], 1, crc_2d)
+		IMPORT_KERNEL(kernels[i], 2, crc_3d)
+		IMPORT_KERNEL(kernels[i], 3, crc_4d)
+		IMPORT_KERNEL(kernels[i], 4, crc_5d)
+		IMPORT_KERNEL(kernels[i], 5, crc_6d)
+		IMPORT_KERNEL(kernels[i], 6, crc_7d)
+		IMPORT_KERNEL(kernels[i], 7, crc_8d)
+		IMPORT_KERNEL(kernels[i], 8, crc_9d)
+		IMPORT_KERNEL(kernels[i], 9, crc_10d)
 		mems[i] = clCreateBuffer(contexts[i], CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 1, &complete_fully, NULL);
 
 
@@ -385,8 +452,8 @@ int main(int argc, char *argv_c[])
 
 	for (cl_uint i = 0; i < numDevices; i++)
 	{
-		check(clReleaseKernel(kernels[i][0]));
-		check(clReleaseKernel(kernels[i][1]));
+		for (size_t q = 0; q < 20; q++)
+			check(clReleaseKernel(kernels[i][q]));
 		check(clReleaseMemObject(mems[i]));
 		check(clReleaseCommandQueue(commandQueues[i]));
 		check(clReleaseProgram(programs[i]));
