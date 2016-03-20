@@ -1,3 +1,35 @@
+#define COMMON_ARGS __global uint *output, __global uint *TestFor, __global uchar *complete, __global uint *total
+
+#define STEAM_0_0 0xE9348804
+#define STEAM_0_1 0xF02FB945
+
+#define COMMON_START(crcstart, addend) \
+	uint now = crcstart; \
+	uint chars = get_global_id(0) + addend;
+
+#define COMMON_END(addend) \
+	if (*complete) \
+	{ \
+		now = (now >> 8) ^ lookup[(now & 0xFF) ^ '_']; \
+		now = (now >> 8) ^ lookup[(now & 0xFF) ^ 'g']; \
+		now = (now >> 8) ^ lookup[(now & 0xFF) ^ 'm']; \
+	} \
+	if (now == *TestFor) \
+		output[atomic_add(total, 1)] = get_global_id(0) + addend;
+
+#define COMMON_BODY(name, addend, body) \
+	__kernel void name##_1 (COMMON_ARGS) \
+	{ \
+		COMMON_START(STEAM_0_1, addend); \
+		body \
+		COMMON_END(addend); \
+	} \
+	__kernel void name##_0 (COMMON_ARGS) \
+	{ \
+		COMMON_START(STEAM_0_0, addend); \
+		body \
+		COMMON_END(addend); \
+	} 
 __constant uint lookup[0x100] = {
 	// note: the first number of every second row corresponds to the half-byte look-up table !
 	0x00000000,0x77073096,0xEE0E612C,0x990951BA,0x076DC419,0x706AF48F,0xE963A535,0x9E6495A3,
@@ -33,6 +65,84 @@ __constant uint lookup[0x100] = {
 	0xBDBDF21C,0xCABAC28A,0x53B39330,0x24B4A3A6,0xBAD03605,0xCDD70693,0x54DE5729,0x23D967BF,
 	0xB3667A2E,0xC4614AB8,0x5D681B02,0x2A6F2B94,0xB40BBE37,0xC30C8EA1,0x5A05DF1B,0x2D02EF8D,
 };
+COMMON_BODY(crc_10d, 1000000000, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (chars / 1000000000 + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100000000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10000000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+
+COMMON_BODY(crc_9d, 100000000, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars / 100000000) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10000000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+COMMON_BODY(crc_8d, 10000000, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars / 10000000) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+COMMON_BODY(crc_7d, 1000000, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars / 1000000) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+COMMON_BODY(crc_6d, 100000, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars / 100000) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+COMMON_BODY(crc_5d, 10000, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars / 10000) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 1000) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+COMMON_BODY(crc_4d, 1000, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars / 1000) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 100) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+COMMON_BODY(crc_3d, 100, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars / 100) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (((chars / 10) % 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+COMMON_BODY(crc_2d, 10, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars / 10) + '0')];
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ ((chars % 10) + '0')];
+})
+
+COMMON_BODY(crc_1d, 1, {
+	now = (now >> 8) ^ lookup[(now & 0xFF) ^ (chars + '0')];
+})
+
 __kernel void crc(__global uint *output, __global uint *TestFor, __global uchar *complete, __global uint *total)
 {
 	uint now = get_global_id(0);
