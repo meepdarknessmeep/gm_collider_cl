@@ -153,7 +153,7 @@ size_t RunKernel(cl_mem &mem, cl_command_queue &commandQueue, cl_mem &crcOutput,
 	return ++index;
 }
 
-void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, cl_uint jsoni, cl_uint testfor, bool jsonfile)
+std::thread Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, bool command_line, cl_program &program, json &outjson, cl_context &context, cl_uint jsoni, cl_uint testfor, bool jsonfile)
 {
 	const cl_uint max_finds = 100;
 
@@ -198,7 +198,7 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	check(clReleaseMemObject(crcFindCount));
 	check(clReleaseMemObject(crcFindCount2));
 
-	std::thread([&outjson, waitindex, FindCount, FindCount2, jsoni, testfor, jsonfile](cl_uint *output1, cl_uint *output2)
+	return std::thread([&outjson, waitindex, FindCount, FindCount2, jsoni, testfor, jsonfile](cl_uint *output1, cl_uint *output2)
 	{
 		char index[128];
 		char outputstr[128];
@@ -222,7 +222,7 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 		}
 		delete[] output1;
 		delete[] output2;
-	}, output1, output2).detach();
+	}, output1, output2);
 
 };
 
@@ -312,7 +312,9 @@ int main(int argc, char *argv_c[])
 	auto    numDevicesPlatform = create_ptr<cl_uint>(numPlatforms);
 	for (cl_uint i = 0; i < numPlatforms; i++)
 	{
-		check(clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, 0, NULL, &numDevicesPlatform[i]));
+		cl_uint status = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU, 0, NULL, &numDevicesPlatform[i]);
+		if (status != CL_SUCCESS && status != CL_DEVICE_NOT_FOUND)
+			check(status);
 		numDevices += numDevicesPlatform[i];
 	}
 	auto devices = create_ptr<cl_device_id>(numDevices);
@@ -321,7 +323,8 @@ int main(int argc, char *argv_c[])
 
 	for (cl_uint i = 0; i < numPlatforms; i++)
 	{
-		check(clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, numDevicesPlatform[i], &devices[devices_total], NULL));
+		if (numDevicesPlatform[i] > 0)
+			check(clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU, numDevicesPlatform[i], &devices[devices_total], NULL));
 		devices_total += numDevicesPlatform[i];
 	}
 
@@ -411,10 +414,14 @@ int main(int argc, char *argv_c[])
 		{
 			threads[i] = std::thread([i, &crc_array_size, &mems, &commandQueues, &kernels, command_line, &programs, &outjson, &jsoni, &contexts, jsonfile, &crc_array]()
 			{
+				auto json_threads = create_ptr<std::thread>(crc_array_size);
+				cl_uint currentthreadindex = 0;
 				cl_uint currentjsoni;
 				while((currentjsoni = jsoni.fetch_add(1)) < crc_array_size)
-					Thread(mems[i], commandQueues[i], kernels[i], command_line, programs[i], outjson, contexts[i], currentjsoni, crc_array[currentjsoni], jsonfile);
+					json_threads[currentthreadindex++] = Thread(mems[i], commandQueues[i], kernels[i], command_line, programs[i], outjson, contexts[i], currentjsoni, crc_array[currentjsoni], jsonfile);
 				clFinish(commandQueues[i]);
+				for (cl_uint i = 0; i < currentthreadindex; i++)
+					json_threads[i].join();
 			});
 		}
 		for (cl_uint i = 0; i < numDevices; i++)
@@ -438,7 +445,7 @@ int main(int argc, char *argv_c[])
 			}
 
 
-			Thread(mems[0], commandQueues[0], kernels[0], command_line, programs[0], outjson, contexts[0], 0, testfor, jsonfile);
+			Thread(mems[0], commandQueues[0], kernels[0], command_line, programs[0], outjson, contexts[0], 0, testfor, jsonfile).join();
 
 
 			if (!interactive)
