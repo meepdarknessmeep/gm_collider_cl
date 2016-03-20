@@ -164,60 +164,65 @@ void Thread(cl_mem &mem, cl_command_queue &commandQueue, cl_kernel *kernels, boo
 	cl_mem crcCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE, 4, NULL, NULL);
 
 	
-	unsigned int FindCount = 0, FindCount2 = 0;
 	cl_uint testfor2 = testfor;
 
 	cl_mem crcTestFor = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 4, &testfor2, NULL);
+	cl_uint FindCount = 0, FindCount2 = 0;
 	cl_mem crcFindCount = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
 	cl_mem crcFindCount2 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, 4, &FindCount, NULL);
 
-	cl_event Events[22];
+	cl_event Events[24];
 
 	size_t waitindex = RunKernel(mem, commandQueue, crcOutput, crcOutput2, crcCount1, crcCount2, crcTestFor, crcFindCount, crcFindCount2, kernels, Events, count);
 
 
-	check(clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_TRUE, 0, 4, &FindCount2, waitindex * 2, Events, &Events[20]));
 
-	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_TRUE, 0, 4, &FindCount, waitindex * 2, Events, &Events[21]));
+	check(clEnqueueReadBuffer(commandQueue, crcFindCount2, CL_FALSE, 0, 4, &FindCount2, waitindex * 2, Events, &Events[waitindex * 2]));
 
-	cl_uint output1[max_finds], output2[max_finds];
-	if (FindCount > 0)
-		check(clEnqueueReadBuffer(commandQueue, crcOutput, CL_TRUE, 0, 4 * FindCount, output1, 1, &Events[20], NULL));
-	if (FindCount2 > 0)
-		check(clEnqueueReadBuffer(commandQueue, crcOutput2, CL_TRUE, 0, 4 * FindCount2, output2, 1, &Events[21], NULL));
+	check(clEnqueueReadBuffer(commandQueue, crcFindCount, CL_FALSE, 0, 4, &FindCount, waitindex * 2, Events, &Events[waitindex * 2 + 1]));
 
-	char index[128];
-	char outputstr[128];
-	sprintf(index, "%u", ~testfor);
-	if (jsonfile)
-		outjson[index] = json::array();
+	cl_uint *output1 = new cl_uint[max_finds], *output2 = new cl_uint[max_finds];
+	check(clEnqueueReadBuffer(commandQueue, crcOutput, CL_FALSE, 0, 4 * max_finds, output1, 1, &Events[waitindex * 2], &Events[waitindex * 2 + 2]));
+	check(clEnqueueReadBuffer(commandQueue, crcOutput2, CL_FALSE, 0, 4 * max_finds, output2, 1, &Events[waitindex * 2 + 1], &Events[waitindex * 2 + 3]));
 
-	for (cl_uint z = 0; z < FindCount; z++)
-	{
-		sprintf(outputstr, "STEAM_0:0:%u", output1[z]);
-		printf("%u %s\n", jsoni, outputstr);
-		if (jsonfile)
-			outjson[index].push_back(outputstr);
-	}
-	for (cl_uint z = 0; z < FindCount2; z++)
-	{
-		sprintf(outputstr, "STEAM_0:1:%u", output2[z]);
-		printf("%u %s\n", jsoni, outputstr);
-		if (jsonfile)
-			outjson[index].push_back(outputstr);
-	}
+
+
+	clWaitForEvents(waitindex * 2 + 4, Events); // wait for kernels
+	for (size_t i = 0; i < waitindex * 2 + 4; i++)
+		clReleaseEvent(Events[i]);
+	check(clReleaseMemObject(crcTestFor));
 	check(clReleaseMemObject(crcCount1));
 	check(clReleaseMemObject(crcCount2));
 	check(clReleaseMemObject(crcOutput));
 	check(clReleaseMemObject(crcOutput2));
-	check(clReleaseMemObject(crcTestFor));		//Release mem object.
-	check(clReleaseMemObject(crcFindCount));		//Release mem object.
-	check(clReleaseMemObject(crcFindCount2));		//Release mem object.
-	for (size_t i = 0; i < waitindex * 2; i++)
-		clReleaseEvent(Events[i]);
+	check(clReleaseMemObject(crcFindCount));
+	check(clReleaseMemObject(crcFindCount2));
 
-	clFinish(commandQueue);
+	std::thread([&outjson, waitindex, FindCount, FindCount2, jsoni, testfor, jsonfile](cl_uint *output1, cl_uint *output2)
+	{
+		char index[128];
+		char outputstr[128];
+		sprintf(index, "%u", ~testfor);
+		if (jsonfile)
+			outjson[index] = json::array();
 
+		for (cl_uint z = 0; z < FindCount; z++)
+		{
+			sprintf(outputstr, "STEAM_0:0:%u", output1[z]);
+			printf("%u %s\n", jsoni, outputstr);
+			if (jsonfile)
+				outjson[index].push_back(outputstr);
+		}
+		for (cl_uint z = 0; z < FindCount2; z++)
+		{
+			sprintf(outputstr, "STEAM_0:1:%u", output2[z]);
+			printf("%u %s\n", jsoni, outputstr);
+			if (jsonfile)
+				outjson[index].push_back(outputstr);
+		}
+		delete[] output1;
+		delete[] output2;
+	}, output1, output2).detach();
 
 };
 
@@ -409,7 +414,7 @@ int main(int argc, char *argv_c[])
 				cl_uint currentjsoni;
 				while((currentjsoni = jsoni.fetch_add(1)) < crc_array_size)
 					Thread(mems[i], commandQueues[i], kernels[i], command_line, programs[i], outjson, contexts[i], currentjsoni, crc_array[currentjsoni], jsonfile);
-
+				clFinish(commandQueues[i]);
 			});
 		}
 		for (cl_uint i = 0; i < numDevices; i++)
